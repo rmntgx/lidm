@@ -23,6 +23,7 @@
 #include "ui.h"
 #include "users.h"
 #include "util.h"
+#include "launch_state.h"
 
 static void print_box();
 static void print_footer();
@@ -340,6 +341,14 @@ int load(struct Vector *users, struct Vector *sessions) {
   of_user = ofield_new(users->length);
   of_passwd = ofield_new(0);
 
+  struct LaunchState initial_state = read_launch_state();
+  if(initial_state.user_opt > users->length || initial_state.session_opt > sessions->length + behavior.include_defshell) {
+	  initial_state.user_opt = 1;
+	  initial_state.session_opt = 1;
+  }
+  of_user.current_opt = initial_state.user_opt;
+  of_session.current_opt = initial_state.session_opt;
+
   /// PRINTING
   const struct uint_point boxstart = box_start();
 
@@ -395,6 +404,11 @@ int load(struct Vector *users, struct Vector *sessions) {
       }
     } else {
       if (len == 1 && *seq == '\n') {
+        struct LaunchState ls;
+		ls.user_opt = of_user.current_opt;
+		ls.session_opt = of_session.current_opt;
+		write_launch_state(ls);
+
         if (!launch(get_current_user().username, of_passwd.efield.content,
                     get_current_session(), &restore_all, &behavior)) {
           print_passwd(box_start(), of_passwd.efield.length, true);
