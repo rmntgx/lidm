@@ -41,6 +41,7 @@ struct uint_point {
 static void print_session(struct uint_point, struct session, bool);
 static void print_user(struct uint_point, struct user, bool);
 static void print_passwd(struct uint_point, uint, bool);
+void print_ui();
 
 enum input { SESSION, USER, PASSWD };
 static u_char inputs_n = 3;
@@ -54,6 +55,24 @@ static struct theme theme;
 static struct functions functions;
 static struct strings strings;
 static struct behavior behavior;
+
+bool screen_reseted = false;
+
+void resize_handler(int) {
+  ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);
+
+  if (window.ws_row < boxh + 4 || window.ws_col < boxw + 4) {
+    printf("\033[2J\033[H"); // Clear screen
+    printf("\x1b[1;31mScreen too small\x1b[0m\n");
+    printf("\x1b[%s;%sm\x1b[2J", theme.colors.bg, theme.colors.fg);
+    return;
+  }
+
+  printf("\033[2J\033[H"); // Clear screen
+
+  print_ui();
+}
+
 void setup(struct config __config) {
   ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);
 
@@ -79,9 +98,9 @@ void setup(struct config __config) {
   // (applying color to all screen)
   printf("\x1b[s\x1b[?47h\x1b[%s;%sm\x1b[2J", theme.colors.bg, theme.colors.fg);
 
-  print_footer();
   atexit(restore_all);
   signal(SIGINT, signal_handler);
+  signal(SIGWINCH, resize_handler);
 }
 
 static struct uint_point box_start() {
@@ -95,12 +114,8 @@ static char *fmt_time() {
   time_t t = time(NULL);
   struct tm tm = *localtime(&t);
 
-  size_t bsize =
-      snprintf(NULL, 0, "%d-%02d-%02d %02d:%02d:%02d", tm.tm_year + 1900,
-               tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec) +
-      1;
-  char *buf = malloc(bsize);
-  snprintf(buf, bsize, "%d-%02d-%02d %02d:%02d:%02d", tm.tm_year + 1900,
+  char *buf = malloc(100);
+  snprintf(buf, 100, "%d-%02d-%02d %02d:%02d:%02d", tm.tm_year + 1900,
            tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
   return buf;
 }
@@ -323,19 +338,43 @@ void ffield_type(char *text) {
   print_ffield();
 }
 
+void print_ui() {
+  // hostnames larger won't render properly
+  char *hostname = malloc(16);
+  if (gethostname(hostname, 16) != 0) {
+    strcpy(hostname, "unknown");
+  }
+
+  /// PRINTING
+
+  const struct uint_point boxstart = box_start();
+
+  print_box();
+
+  // put hostname
+  printf("\x1b[%d;%dH\x1b[%sm%s\x1b[%sm", boxstart.y + 2,
+         boxstart.x + 12 - (uint)strlen(hostname), theme.colors.e_hostname,
+         hostname, theme.colors.fg);
+  free(hostname);
+
+  // put date
+  char *fmtd_time = fmt_time();
+  printf("\x1b[%d;%dH\x1b[%sm%s\x1b[%sm", boxstart.y + 2,
+         boxstart.x + boxw - 3 - (uint)strlen(fmtd_time), theme.colors.e_date,
+         fmtd_time, theme.colors.fg);
+  free(fmtd_time);
+
+  print_field(SESSION);
+  print_field(USER);
+  print_field(PASSWD);
+  print_footer();
+  ffield_cursor_focus();
+}
+
 int load(struct Vector *users, struct Vector *sessions) {
   /// SETUP
   gusers = users;
   gsessions = sessions;
-
-  // hostnames larger won't render properly
-  char *hostname = malloc(16);
-  if (gethostname(hostname, 16) != 0) {
-    free(hostname);
-    hostname = "unknown";
-  } else {
-    hostname = realloc(hostname, strlen(hostname) + 1);
-  }
 
   of_session = ofield_new(sessions->length + behavior.include_defshell);
   of_user = ofield_new(users->length);
@@ -349,27 +388,7 @@ int load(struct Vector *users, struct Vector *sessions) {
   of_user.current_opt = initial_state.user_opt;
   of_session.current_opt = initial_state.session_opt;
 
-  /// PRINTING
-  const struct uint_point boxstart = box_start();
-
-  // printf box
-  print_box();
-
-  // put hostname
-  printf("\x1b[%d;%dH\x1b[%sm%s\x1b[%sm", boxstart.y + 2,
-         boxstart.x + 12 - (uint)strlen(hostname), theme.colors.e_hostname,
-         hostname, theme.colors.fg);
-
-  // put date
-  char *fmtd_time = fmt_time();
-  printf("\x1b[%d;%dH\x1b[%sm%s\x1b[%sm", boxstart.y + 2,
-         boxstart.x + boxw - 3 - (uint)strlen(fmtd_time), theme.colors.e_date,
-         fmtd_time, theme.colors.fg);
-
-  print_field(SESSION);
-  print_field(USER);
-  print_field(PASSWD);
-  ffield_cursor_focus();
+  print_ui();
 
   /// INTERACTIVE
   u_char len;
