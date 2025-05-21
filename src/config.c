@@ -141,21 +141,26 @@ struct config *parse_config(char *path) {
   struct stat sb;
   FILE *fd = fopen(path, "r");
   if (fd == NULL || (stat(path, &sb) == -1)) {
-    perror("fopen");
+    fprintf(stderr, "Failed to open config file\n"
+                    "Copy a theme from 'themes' folder to '/etc/lidm.ini'\n");
     return NULL;
   }
 
   __config = malloc(sizeof(struct config));
+  if (__config == NULL) {
+    fclose(fd);
+    return NULL;
+  }
   __config->behavior.source = vec_new();
   __config->behavior.user_source = vec_new();
 
-  if (__config == NULL)
-    return NULL;
   bool ret = line_parser(fd, (ssize_t *)&sb.st_blksize, config_line_handler);
   if (!ret) {
     free(__config);
+    fclose(fd);
     return NULL;
   }
 
+  fclose(fd);
   return __config;
 }
