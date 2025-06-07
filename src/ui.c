@@ -61,13 +61,13 @@ void resize_handler(int) {
   ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);
 
   if (window.ws_row < boxh + 4 || window.ws_col < boxw + 4) {
-    printf("\033[2J\033[H"); // Clear screen
+    printf("\x1b[2J\x1b[H"); // Clear screen
     printf("\x1b[1;31mScreen too small\x1b[0m\n");
     printf("\x1b[%s;%sm\x1b[2J", theme.colors.bg, theme.colors.fg);
     return;
   }
 
-  printf("\033[2J\033[H"); // Clear screen
+  printf("\x1b[2J\x1b[H"); // Clear screen
 
   print_ui();
 }
